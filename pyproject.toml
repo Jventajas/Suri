@@ -2,4 +2,27 @@
 name = "suri"
 version = "0.1.0"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "langgraph",
+    "deepagents",
+    "langchain-ollama",
+    "textual",
+    "pydantic",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+suri = "suri.cli:main"
+
+[dependency-groups]
+dev = [
+    "pyright",
+]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+include = ["suri"]
