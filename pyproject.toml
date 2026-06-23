@@ -26,3 +26,5 @@ dev = [
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
 include = ["suri"]
+venvPath = "."
+venv = ".venv"
