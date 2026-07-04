@@ -43,6 +43,7 @@ class SuriApp(App[None]):
         transcript.scroll_end(animate=False)
 
         self._history.append(HumanMessage(message))
+        event.input.disabled = True
         self._stream_reply(reply_widget)
 
     @work
@@ -56,6 +57,10 @@ class SuriApp(App[None]):
                 case TurnComplete():
                     pass
         self._history.append(AIMessage(reply))
+
+        input_widget = self.query_one(Input)
+        input_widget.disabled = False
+        input_widget.focus()
 
     def _render_reply(self, widget: Static, text: str) -> None:
         widget.update(f"[bold magenta]suri:[/] {text}")
