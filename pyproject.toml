@@ -6,8 +6,11 @@ dependencies = [
     "langgraph",
     "deepagents",
     "langchain-ollama",
+    "langchain-openai",
     "textual",
     "pydantic",
+    "keyring",
+    "httpx",
 ]
 
 [build-system]
