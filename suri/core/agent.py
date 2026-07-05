@@ -15,10 +15,10 @@ SYSTEM_PROMPT = "You are Suri, an assistant for mathematical research."
 class Agent:
     """Single deepagents/LangGraph agent."""
 
-    def __init__(self) -> None:
+    def __init__(self, provider_id: str, model_id: str) -> None:
         # deepagents' compiled graph is only partially typed; pin to Any at this boundary.
         self._graph: Any = create_deep_agent(
-            model=build_model(),
+            model=build_model(provider_id, model_id),
             tools=[],
             system_prompt=SYSTEM_PROMPT,
         )

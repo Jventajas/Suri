@@ -1,29 +1,25 @@
 """Model provider layer: the hot-swap seam between core and any LLM provider."""
 
-import os
-
 from langchain_core.language_models import BaseChatModel
 from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
-# Hardcoded for now; deferred to a future config-loading iteration (see
-# roadmap/01_chat_cli.md "Open") — CLI flag > env var > config file > default.
-MODEL_ID = "qwen3:14b"
-OLLAMA_BASE_URL = "http://localhost:11434"
-
-PROVIDER_ENV_VAR = "SURI_MODEL_PROVIDER"
-DEFAULT_PROVIDER = "ollama"
+from suri.core.providers import get_api_key, get_provider
 
 
-def build_model(provider: str | None = None) -> BaseChatModel:
+def build_model(provider_id: str, model_id: str) -> BaseChatModel:
     """Return the chat model behind the provider-agnostic interface.
 
-    Provider is selected via `provider` or the `SURI_MODEL_PROVIDER` env var,
-    defaulting to local Ollama. Add new providers as new match arms here when
-    they're actually needed (e.g. Claude/OpenAI in prod).
+    Both `provider_id` and `model_id` must already be resolved by the caller (onboarding
+    or a provider/model switch) — this function never picks a default.
     """
-    provider = provider or os.environ.get(PROVIDER_ENV_VAR, DEFAULT_PROVIDER)
-    match provider:
-        case "ollama":
-            return ChatOllama(model=MODEL_ID, base_url=OLLAMA_BASE_URL)
-        case _:
-            raise ValueError(f"Unknown model provider: {provider!r}")
+    provider = get_provider(provider_id)
+
+    if provider_id == "ollama":
+        return ChatOllama(model=model_id, base_url=provider.base_url)
+
+    api_key = get_api_key(provider_id)
+    if api_key is None:
+        raise ValueError(f"No API key stored for provider {provider_id!r}; run /login {provider_id} first.")
+    return ChatOpenAI(model=model_id, base_url=provider.base_url, api_key=SecretStr(api_key))

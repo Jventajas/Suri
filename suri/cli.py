@@ -8,6 +8,10 @@ from textual.widgets import Footer, Input, Static
 
 from suri.core import Agent, TextChunk, TurnComplete
 
+# TODO: delete once onboarding forces an explicit provider/model choice — this assumes Ollama is installed and running, which isn't true on a fresh install.
+STOPGAP_PROVIDER_ID = "ollama"
+STOPGAP_MODEL_ID = "qwen3:14b"
+
 
 class SuriApp(App[None]):
     """Textual REPL for chatting with the Suri agent."""
@@ -16,7 +20,7 @@ class SuriApp(App[None]):
 
     def __init__(self) -> None:
         super().__init__()
-        self._agent = Agent()
+        self._agent = Agent(STOPGAP_PROVIDER_ID, STOPGAP_MODEL_ID)
         self._history: list[BaseMessage] = []
 
     def compose(self) -> ComposeResult:
@@ -28,21 +32,22 @@ class SuriApp(App[None]):
         self.query_one(Input).focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        message = event.value.strip()
-        event.input.value = "" # Clear prompt window.
-        if not message:
+        value = event.value.strip()
+        event.input.value = ""
+
+        if not value:
             return
-        if message in ("exit", "quit"):
+        if value in ("exit", "quit"):
             self.exit()
             return
 
         transcript = self.query_one("#transcript", VerticalScroll)
-        transcript.mount(Static(f"[bold cyan]you:[/] {message}"))
+        transcript.mount(Static(f"[bold cyan]you:[/] {value}"))
         reply_widget = Static("[bold magenta]suri:[/] [dim]…[/]")
         transcript.mount(reply_widget)
         transcript.scroll_end(animate=False)
 
-        self._history.append(HumanMessage(message))
+        self._history.append(HumanMessage(value))
         event.input.disabled = True
         self._stream_reply(reply_widget)
 
