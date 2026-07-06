@@ -13,8 +13,6 @@ from suri.core import Agent, TextChunk, TurnComplete
 class ChatScreen(Screen[None]):
     """Textual screen for chatting with the Suri agent."""
 
-    BINDINGS = [("ctrl+d", "quit", "Quit")]
-
     def __init__(self, provider_id: str, model_id: str) -> None:
         super().__init__()
         self._agent = Agent(provider_id, model_id)
@@ -22,7 +20,7 @@ class ChatScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         yield VerticalScroll(id="transcript")
-        yield Input(placeholder="Type a message… (exit/quit to leave)")
+        yield Input(placeholder="Type a message… ('exit' to leave)")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -34,7 +32,7 @@ class ChatScreen(Screen[None]):
 
         if not value:
             return
-        if value in ("exit", "quit"):
+        if value == "exit":
             self.app.exit()  # pyright: ignore[reportUnknownMemberType]
             return
 
