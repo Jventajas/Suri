@@ -1,26 +1,23 @@
-"""CLI entry point: REPL loop."""
+"""Chat screen: the REPL loop against a resolved provider/model."""
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from textual import work
-from textual.app import App, ComposeResult
+from textual.app import ComposeResult
 from textual.containers import VerticalScroll
+from textual.screen import Screen
 from textual.widgets import Footer, Input, Static
 
 from suri.core import Agent, TextChunk, TurnComplete
 
-# TODO: delete once onboarding forces an explicit provider/model choice — this assumes Ollama is installed and running, which isn't true on a fresh install.
-STOPGAP_PROVIDER_ID = "ollama"
-STOPGAP_MODEL_ID = "qwen3:14b"
 
-
-class SuriApp(App[None]):
-    """Textual REPL for chatting with the Suri agent."""
+class ChatScreen(Screen[None]):
+    """Textual screen for chatting with the Suri agent."""
 
     BINDINGS = [("ctrl+d", "quit", "Quit")]
 
-    def __init__(self) -> None:
+    def __init__(self, provider_id: str, model_id: str) -> None:
         super().__init__()
-        self._agent = Agent(STOPGAP_PROVIDER_ID, STOPGAP_MODEL_ID)
+        self._agent = Agent(provider_id, model_id)
         self._history: list[BaseMessage] = []
 
     def compose(self) -> ComposeResult:
@@ -38,7 +35,7 @@ class SuriApp(App[None]):
         if not value:
             return
         if value in ("exit", "quit"):
-            self.exit()
+            self.app.exit()  # pyright: ignore[reportUnknownMemberType]
             return
 
         transcript = self.query_one("#transcript", VerticalScroll)
@@ -70,7 +67,3 @@ class SuriApp(App[None]):
     def _render_reply(self, widget: Static, text: str) -> None:
         widget.update(f"[bold magenta]suri:[/] {text}")
         self.query_one("#transcript", VerticalScroll).scroll_end(animate=False)
-
-
-def main() -> None:
-    SuriApp().run()

@@ -27,7 +27,7 @@ class ProviderSpec:
 PROVIDERS: tuple[ProviderSpec, ...] = (
     ProviderSpec(id="ollama", name="Ollama (local)", base_url="http://localhost:11434", requires_api_key=False),
     ProviderSpec(id="minimax", name="MiniMax", base_url="https://api.minimax.io/v1", requires_api_key=True),
-    ProviderSpec(id="zai", name="Z.ai", base_url="https://api.z.ai/api/paas/v4", requires_api_key=True),
+    ProviderSpec(id="zai", name="Z.ai", base_url="https://api.z.ai/api/coding/paas/v4", requires_api_key=True),
 )
 
 
