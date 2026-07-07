@@ -1,6 +1,7 @@
 """Chat screen: the REPL loop against a resolved provider/model."""
 
 from dataclasses import dataclass
+from typing import assert_never
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from textual import work
@@ -11,6 +12,8 @@ from textual.screen import Screen
 from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
+from suri.cli.screens.login import LoginScreen
+from suri.cli.screens.model_picker import ModelChoice, ModelScreen
 from suri.core import Agent, TextChunk, TurnComplete
 
 
@@ -28,35 +31,74 @@ COMMANDS: tuple[Command, ...] = (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class Chatting:
+    """Default mode: input goes to the agent, or opens the command menu on `/`."""
+
+
+@dataclass(frozen=True, slots=True)
+class PickingCommand:
+    """Input narrows the `/` command menu."""
+
+
+Mode = Chatting | PickingCommand
+
+
 class ChatScreen(Screen[None]):
     """Textual screen for chatting with the Suri agent."""
+
+    CSS = """
+    #model-status {
+        padding: 1 1 1 0;
+        content-align: right middle;
+    }
+    """
 
     BINDINGS = [
         Binding("up", "menu_cursor_up", show=False),
         Binding("down", "menu_cursor_down", show=False),
+        Binding("escape", "cancel_picker", show=False),
     ]
 
     def __init__(self, provider_id: str, model_id: str) -> None:
         super().__init__()
+        self._provider_id = provider_id
+        self._model_id = model_id
         self._agent = Agent(provider_id, model_id)
         self._history: list[BaseMessage] = []
+        self._mode: Mode = Chatting()
 
     def compose(self) -> ComposeResult:
         yield VerticalScroll(id="transcript")
         yield OptionList(id="command-menu")
         yield Input(placeholder="Type a message… ('exit' to leave, '/' for commands)")
+        yield Static(id="model-status")
         yield Footer()
 
     def on_mount(self) -> None:
         self.query_one("#command-menu", OptionList).display = False
+        self._update_model_status()
         self.query_one(Input).focus()
 
+    def _update_model_status(self) -> None:
+        self.query_one("#model-status", Static).update(f"({self._provider_id}) {self._model_id}")
+
     def on_input_changed(self, event: Input.Changed) -> None:
+        match self._mode:
+            case Chatting():
+                if event.value.startswith("/"):
+                    self._mode = PickingCommand()
+                    self._filter_commands(event.value[1:])
+            case PickingCommand():
+                if not event.value.startswith("/"):
+                    self._reset_to_chatting()
+                else:
+                    self._filter_commands(event.value[1:])
+            case _:
+                assert_never(self._mode)
+
+    def _filter_commands(self, filter_text: str) -> None:
         menu = self.query_one("#command-menu", OptionList)
-        if not event.value.startswith("/"):
-            menu.display = False
-            return
-        filter_text = event.value[1:]
         menu.clear_options()
         for command in COMMANDS:
             if filter_text in command.name:
@@ -67,6 +109,7 @@ class ChatScreen(Screen[None]):
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         if event.option_list.id == "command-menu" and event.option.id is not None:
+            self._reset_to_chatting()
             self._run_command(event.option.id)
 
     def action_menu_cursor_up(self) -> None:
@@ -79,18 +122,54 @@ class ChatScreen(Screen[None]):
         if menu.display:
             menu.action_cursor_down()
 
+    def action_cancel_picker(self) -> None:
+        match self._mode:
+            case Chatting():
+                pass
+            case PickingCommand():
+                self._reset_to_chatting()
+            case _:
+                assert_never(self._mode)
+
+    def _reset_to_chatting(self) -> None:
+        self._mode = Chatting()
+        self.query_one("#command-menu", OptionList).display = False
+        input_widget = self.query_one(Input)
+        input_widget.value = ""
+
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        value = event.value.strip()
-        menu = self.query_one("#command-menu", OptionList)
+        match self._mode:
+            case Chatting():
+                self._submit_message(event.value.strip())
+            case PickingCommand():
+                menu = self.query_one("#command-menu", OptionList)
+                highlighted = menu.highlighted_option
+                self._reset_to_chatting()
+                if highlighted is not None and highlighted.id is not None:
+                    self._run_command(highlighted.id)
+            case _:
+                assert_never(self._mode)
 
-        if value.startswith("/"):
-            event.input.value = ""
-            highlighted = menu.highlighted_option
-            if menu.display and highlighted is not None and highlighted.id is not None:
-                self._run_command(highlighted.id)
-            return
+    def _run_command(self, name: str) -> None:
+        if name == "login":
+            self.app.push_screen(LoginScreen(), self._refocus_input)  # pyright: ignore[reportUnknownMemberType]
+        elif name == "model":
+            self.app.push_screen(ModelScreen(), self._on_model_picked)  # pyright: ignore[reportUnknownMemberType]
 
-        event.input.value = ""
+    def _refocus_input(self, _: None) -> None:
+        self.query_one(Input).focus()
+
+    def _on_model_picked(self, choice: ModelChoice | None) -> None:
+        if choice is not None:
+            self._agent = Agent(choice.provider_id, choice.model_id)
+            self._provider_id = choice.provider_id
+            self._model_id = choice.model_id
+            self._update_model_status()
+        self.query_one(Input).focus()
+
+    def _submit_message(self, value: str) -> None:
+        input_widget = self.query_one(Input)
+        input_widget.value = ""
         if not value:
             return
         if value == "exit":
@@ -104,11 +183,8 @@ class ChatScreen(Screen[None]):
         transcript.scroll_end(animate=False)
 
         self._history.append(HumanMessage(value))
-        event.input.disabled = True
+        input_widget.disabled = True
         self._stream_reply(reply_widget)
-
-    def _run_command(self, name: str) -> None:
-        self.query_one("#command-menu", OptionList).display = False
 
     @work
     async def _stream_reply(self, reply_widget: Static) -> None:
