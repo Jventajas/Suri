@@ -58,8 +58,12 @@ def list_models(provider_id: str) -> list[str]:
     """List available model ids for a configured provider. Ollama is queried live (it's a local server)."""
     provider = get_provider(provider_id)
     if provider.id == "ollama":
-        response = httpx.get(f"{provider.base_url}/api/tags", timeout=5)
-        response.raise_for_status()
+        try:
+            response = httpx.get(f"{provider.base_url}/api/tags", timeout=5)
+            response.raise_for_status()
+        except httpx.HTTPError:
+            # Local server not running (or misbehaving): the provider just offers no models.
+            return []
         return [model["name"] for model in response.json()["models"]]
 
     if get_api_key(provider.id) is None:

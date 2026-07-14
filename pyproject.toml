@@ -11,6 +11,8 @@ dependencies = [
     "pydantic",
     "keyring",
     "httpx",
+    "ollama",
+    "openai",
 ]
 
 [build-system]

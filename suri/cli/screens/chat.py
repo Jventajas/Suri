@@ -14,7 +14,7 @@ from textual.widgets.option_list import Option
 
 from suri.cli.screens.login import LoginScreen
 from suri.cli.screens.model_picker import ModelChoice, ModelScreen
-from suri.core import Agent, TextChunk, TurnComplete
+from suri.core import Agent, RetryAttempt, StreamError, TextChunk, TurnComplete, save_selection
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +164,7 @@ class ChatScreen(Screen[None]):
             self._agent = Agent(choice.provider_id, choice.model_id)
             self._provider_id = choice.provider_id
             self._model_id = choice.model_id
+            save_selection(choice.provider_id, choice.model_id)
             self._update_model_status()
         self.query_one(Input).focus()
 
@@ -194,9 +195,16 @@ class ChatScreen(Screen[None]):
                 case TextChunk(text=text):
                     reply += text
                     self._render_reply(reply_widget, reply)
+                case RetryAttempt(attempt=attempt, max_attempts=max_attempts, delay=delay):
+                    reply_widget.update(f"[dim]suri: retrying ({attempt}/{max_attempts}) in {delay:.0f}s…[/]")
+                case StreamError(message=message):
+                    reply_widget.update(f"[bold red]suri: {message}[/]")
                 case TurnComplete():
                     pass
-        self._history.append(AIMessage(reply))
+                case _:
+                    assert_never(stream_event)
+        if reply:
+            self._history.append(AIMessage(reply))
 
         input_widget = self.query_one(Input)
         input_widget.disabled = False
