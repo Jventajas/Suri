@@ -14,7 +14,7 @@ from textual.widgets.option_list import Option
 
 from suri.cli.screens.login import LoginScreen
 from suri.cli.screens.model_picker import ModelChoice, ModelScreen
-from suri.core import Agent, RetryAttempt, StreamError, TextChunk, TurnComplete, save_selection
+from suri.core import Agent, RetryAttempt, StreamError, TextChunk, ToolCall, ToolResult, TurnComplete, save_selection
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,6 +199,8 @@ class ChatScreen(Screen[None]):
                     reply_widget.update(f"[dim]suri: retrying ({attempt}/{max_attempts}) in {delay:.0f}s…[/]")
                 case StreamError(message=message):
                     reply_widget.update(f"[bold red]suri: {message}[/]")
+                case ToolCall() | ToolResult():
+                    pass  # TODO: rendering to be implemented in a future spec.
                 case TurnComplete():
                     pass
                 case _:

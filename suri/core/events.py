@@ -32,6 +32,23 @@ class StreamError:
     message: str
 
 
+@dataclass(frozen=True, slots=True)
+class ToolCall:
+    """The assistant invoked a tool with the given arguments."""
+
+    name: str
+    # Model-generated JSON: values are opaque; narrow before operating on them.
+    args: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class ToolResult:
+    """A tool finished and returned this content to the assistant."""
+
+    name: str
+    content: str
+
+
 # Frontend-agnostic contract: any frontend (CLI, GUI, API gateway) consumes
 # this union, never the underlying LangGraph/model event types directly.
-StreamEvent = TextChunk | TurnComplete | RetryAttempt | StreamError
+StreamEvent = TextChunk | TurnComplete | RetryAttempt | StreamError | ToolCall | ToolResult
