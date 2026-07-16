@@ -6,6 +6,8 @@ from typing import cast
 import sympy  # pyright: ignore[reportMissingTypeStubs]
 from langchain_core.tools import tool
 
+from suri.core.tools.parsing import parse_expression
+
 # SymPy's own type information is too partial for strict checking; pin each function we
 # use to a plain object -> object callable at this boundary.
 _OPERATIONS: dict[str, Callable[[object], object]] = {
@@ -17,15 +19,16 @@ _OPERATIONS: dict[str, Callable[[object], object]] = {
 
 
 @tool
-def sympy_eval(expression: str, operation: str = "evaluate") -> str:
+def sympy_eval(expression: str, operation: str = "evaluate", variable_values: dict[str, str] | None = None) -> str:
     """Compute an exact symbolic result, e.g. "sqrt(3)/2" — for decimals use `numeric_eval`.
 
     `expression`: a SymPy expression string, e.g. "x**2 - 1".
     `operation`: "evaluate", "simplify", "solve", "diff" or "integrate".
+    `variable_values`: optional values to plug in first, e.g. {"x": "-2"}.
     On error you get the message back: fix the expression and retry.
     """
     try:
-        expr: object = sympy.sympify(expression)  # pyright: ignore[reportUnknownMemberType]
+        expr = parse_expression(expression, variable_values)
         if operation == "evaluate":
             return str(expr)
         if operation not in _OPERATIONS:

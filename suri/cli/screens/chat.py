@@ -14,7 +14,17 @@ from textual.widgets.option_list import Option
 
 from suri.cli.screens.login import LoginScreen
 from suri.cli.screens.model_picker import ModelChoice, ModelScreen
-from suri.core import Agent, RetryAttempt, StreamError, TextChunk, ToolCall, ToolResult, TurnComplete, save_selection
+from suri.core import (
+    Agent,
+    RetryAttempt,
+    StreamError,
+    TextChunk,
+    TodoListUpdated,
+    ToolCall,
+    ToolResult,
+    TurnComplete,
+    save_selection,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +42,13 @@ COMMANDS: tuple[Command, ...] = (
 
 # The model sees full tool results; the human just needs the gist.
 TOOL_RESULT_DISPLAY_BUDGET = 200  # characters
+
+# One line per task: done = green tick, active = highlighted, pending = dimmed.
+_TODO_LINE_STYLES = {
+    "completed": "[green]☑[/] [dim]{}[/]",
+    "in_progress": "[bold yellow]☐ {}[/]",
+    "pending": "[dim]☐ {}[/]",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +211,7 @@ class ChatScreen(Screen[None]):
     async def _stream_reply(self, reply_widget: Static) -> None:
         reply = ""  # the whole turn's text, for history
         segment = ""  # only the text in the current widget (tool lines split the reply into segments)
+        plan_widget: Static | None = None  # the turn's plan block, updated in place
         async for stream_event in self._agent.stream(self._history):
             match stream_event:
                 case TextChunk(text=text):
@@ -206,11 +224,17 @@ class ChatScreen(Screen[None]):
                     reply_widget.update(f"[bold red]suri: {message}[/]")
                 case ToolCall(name=name, args=args):
                     compact_args = ", ".join(f"{key}={value!r}" for key, value in args.items())
-                    reply_widget, segment = self._insert_tool_line(f"⚙ {name}({compact_args})", reply_widget, segment)
-                case ToolResult(content=content):
+                    _, reply_widget, segment = self._insert_line(f"[dim]⚙ {name}({compact_args})[/]", reply_widget, segment)
+                case ToolResult(name=name, content=content):
                     if len(content) > TOOL_RESULT_DISPLAY_BUDGET:
                         content = content[:TOOL_RESULT_DISPLAY_BUDGET] + "…"
-                    reply_widget, segment = self._insert_tool_line(f"→ {content}", reply_widget, segment)
+                    _, reply_widget, segment = self._insert_line(f"[dim]→ {name}: {content}[/]", reply_widget, segment)
+                case TodoListUpdated(todos=todos):
+                    plan = "\n".join(_TODO_LINE_STYLES[item.status].format(item.content) for item in todos)
+                    if plan_widget is None:
+                        plan_widget, reply_widget, segment = self._insert_line(plan, reply_widget, segment)
+                    else:
+                        plan_widget.update(plan)
                 case TurnComplete():
                     pass
                 case _:
@@ -222,18 +246,19 @@ class ChatScreen(Screen[None]):
         input_widget.disabled = False
         input_widget.focus()
 
-    def _insert_tool_line(self, line: str, reply_widget: Static, segment: str) -> tuple[Static, str]:
-        """Mount a dimmed tool line, keeping the streaming reply widget last in the transcript."""
+    def _insert_line(self, markup: str, reply_widget: Static, segment: str) -> tuple[Static, Static, str]:
+        """Mount a transcript line, keeping the streaming reply widget last; returns (line, reply, segment)."""
         transcript = self.query_one("#transcript", VerticalScroll)
+        line_widget = Static(markup)
         if segment:
             # The current widget already shows text: keep it as-is and stream what follows into a fresh one.
-            transcript.mount(Static(f"[dim]{line}[/]"))
+            transcript.mount(line_widget)
             reply_widget = Static("")
             transcript.mount(reply_widget)
         else:
-            transcript.mount(Static(f"[dim]{line}[/]"), before=reply_widget)
+            transcript.mount(line_widget, before=reply_widget)
         transcript.scroll_end(animate=False)
-        return reply_widget, ""
+        return line_widget, reply_widget, ""
 
     def _render_reply(self, widget: Static, text: str) -> None:
         widget.update(f"[bold magenta]suri:[/] {text}")

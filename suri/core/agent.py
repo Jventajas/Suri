@@ -1,13 +1,23 @@
 """Agent core: LangGraph graph + provider-agnostic model."""
 
 import asyncio
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import Any
 
 from deepagents import create_deep_agent  # pyright: ignore[reportUnknownVariableType]
 from langchain_core.messages import AIMessageChunk, BaseMessage, ToolMessage
 
-from suri.core.events import RetryAttempt, StreamError, StreamEvent, TextChunk, ToolCall, ToolResult, TurnComplete
+from suri.core.events import (
+    RetryAttempt,
+    StreamError,
+    StreamEvent,
+    TextChunk,
+    TodoItem,
+    TodoListUpdated,
+    ToolCall,
+    ToolResult,
+    TurnComplete,
+)
 from suri.core.models import build_model, is_retryable_error
 from suri.core.tools import AGENT_TOOLS
 
@@ -20,6 +30,29 @@ SYSTEM_PROMPT = (
 
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 1.0  # seconds; doubles each attempt
+
+
+def _events_from_model_chunk(chunk: AIMessageChunk) -> Iterator[StreamEvent]:
+    """Translate one chunk of the model's reply into events: tool requests, plan updates, and text."""
+    for call in chunk.tool_calls:
+        if call["name"] == "write_todos":
+            # write_todos is how the model rewrites its own plan: the new list comes in the args.
+            items = call["args"]["todos"]
+            todos = tuple(TodoItem(item["content"], item["status"]) for item in items)
+            # yield an event declaring the progress we've made on the plan.
+            yield TodoListUpdated(todos)
+        else:
+            yield ToolCall(call["name"], call["args"])
+    if chunk.text:
+        yield TextChunk(chunk.text)
+
+
+def _events_from_tool_result(message: ToolMessage) -> Iterator[StreamEvent]:
+    """Translate a finished tool's result into an event."""
+    if message.name == "write_todos":
+        # Its result only echoes the plan, already shown when the model wrote it.
+        return
+    yield ToolResult(message.name or "", message.text)
 
 
 class Agent:
@@ -40,16 +73,13 @@ class Agent:
             stream_mode="messages",
         )
         async for message, _meta in graph_events:
-            # The model's reply arrives as many small chunks: each one holds a piece of
-            # text, a tool invocation, or nothing useful (skipped).
+            # A message is either from the model (a piece of its reply) or from a tool (its result).
             if isinstance(message, AIMessageChunk):
-                for call in message.tool_calls:
-                    yield ToolCall(call["name"], call["args"])
-                if message.text:
-                    yield TextChunk(message.text)
-            # A finished tool execution arrives as one whole ToolMessage.
+                for event in _events_from_model_chunk(message):
+                    yield event
             elif isinstance(message, ToolMessage):
-                yield ToolResult(message.name or "", message.text)
+                for event in _events_from_tool_result(message):
+                    yield event
 
     async def stream(self, history: Sequence[BaseMessage]) -> AsyncIterator[StreamEvent]:
         """Stream assistant response events; failures surface as events, never raw exceptions."""

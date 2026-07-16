@@ -49,6 +49,21 @@ class ToolResult:
     content: str
 
 
+@dataclass(frozen=True, slots=True)
+class TodoItem:
+    """One task in the assistant's self-written plan."""
+
+    content: str
+    status: str  # "pending" | "in_progress" | "completed"
+
+
+@dataclass(frozen=True, slots=True)
+class TodoListUpdated:
+    """The assistant updated its plan; carries the full current list."""
+
+    todos: tuple[TodoItem, ...]
+
+
 # Frontend-agnostic contract: any frontend (CLI, GUI, API gateway) consumes
 # this union, never the underlying LangGraph/model event types directly.
-StreamEvent = TextChunk | TurnComplete | RetryAttempt | StreamError | ToolCall | ToolResult
+StreamEvent = TextChunk | TurnComplete | RetryAttempt | StreamError | ToolCall | ToolResult | TodoListUpdated
