@@ -2,9 +2,10 @@
 
 from langchain_core.tools import BaseTool
 
+from suri.core.tools.numeric import numeric_eval
 from suri.core.tools.symbolic import sympy_eval
 
 # Every tool the agent gets; new tool modules register here, agent.py never changes.
-AGENT_TOOLS: tuple[BaseTool, ...] = (sympy_eval,)
+AGENT_TOOLS: tuple[BaseTool, ...] = (sympy_eval, numeric_eval)
 
 __all__ = ["AGENT_TOOLS"]

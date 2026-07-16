@@ -18,13 +18,11 @@ _OPERATIONS: dict[str, Callable[[object], object]] = {
 
 @tool
 def sympy_eval(expression: str, operation: str = "evaluate") -> str:
-    """Verify or compute mathematics symbolically with SymPy.
+    """Compute an exact symbolic result, e.g. "sqrt(3)/2" — for decimals use `numeric_eval`.
 
-    `expression` is a single SymPy expression string, e.g. "x**2 - 1" or "sin(pi/3)".
-    `operation` is one of: "evaluate" (parse and auto-simplify), "simplify", "solve"
-    (roots of expression = 0), "diff", "integrate". Example: expression="x**2 - 1",
-    operation="solve" returns "[-1, 1]". On error, the error message is returned —
-    fix the expression and try again.
+    `expression`: a SymPy expression string, e.g. "x**2 - 1".
+    `operation`: "evaluate", "simplify", "solve", "diff" or "integrate".
+    On error you get the message back: fix the expression and retry.
     """
     try:
         expr: object = sympy.sympify(expression)  # pyright: ignore[reportUnknownMemberType]
