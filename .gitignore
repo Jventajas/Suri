@@ -32,3 +32,6 @@ htmlcov/
 
 # Roadmap files
 roadmap/
+
+# Local test prompts
+test_prompts.txt
