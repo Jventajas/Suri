@@ -30,6 +30,9 @@ COMMANDS: tuple[Command, ...] = (
     Command("model", "Switch the active provider/model"),
 )
 
+# The model sees full tool results; the human just needs the gist.
+TOOL_RESULT_DISPLAY_BUDGET = 200  # characters
+
 
 @dataclass(frozen=True, slots=True)
 class Chatting:
@@ -189,18 +192,25 @@ class ChatScreen(Screen[None]):
 
     @work
     async def _stream_reply(self, reply_widget: Static) -> None:
-        reply = ""
+        reply = ""  # the whole turn's text, for history
+        segment = ""  # only the text in the current widget (tool lines split the reply into segments)
         async for stream_event in self._agent.stream(self._history):
             match stream_event:
                 case TextChunk(text=text):
                     reply += text
-                    self._render_reply(reply_widget, reply)
+                    segment += text
+                    self._render_reply(reply_widget, segment)
                 case RetryAttempt(attempt=attempt, max_attempts=max_attempts, delay=delay):
                     reply_widget.update(f"[dim]suri: retrying ({attempt}/{max_attempts}) in {delay:.0f}s…[/]")
                 case StreamError(message=message):
                     reply_widget.update(f"[bold red]suri: {message}[/]")
-                case ToolCall() | ToolResult():
-                    pass  # TODO: rendering to be implemented in a future spec.
+                case ToolCall(name=name, args=args):
+                    compact_args = ", ".join(f"{key}={value!r}" for key, value in args.items())
+                    reply_widget, segment = self._insert_tool_line(f"⚙ {name}({compact_args})", reply_widget, segment)
+                case ToolResult(content=content):
+                    if len(content) > TOOL_RESULT_DISPLAY_BUDGET:
+                        content = content[:TOOL_RESULT_DISPLAY_BUDGET] + "…"
+                    reply_widget, segment = self._insert_tool_line(f"→ {content}", reply_widget, segment)
                 case TurnComplete():
                     pass
                 case _:
@@ -211,6 +221,19 @@ class ChatScreen(Screen[None]):
         input_widget = self.query_one(Input)
         input_widget.disabled = False
         input_widget.focus()
+
+    def _insert_tool_line(self, line: str, reply_widget: Static, segment: str) -> tuple[Static, str]:
+        """Mount a dimmed tool line, keeping the streaming reply widget last in the transcript."""
+        transcript = self.query_one("#transcript", VerticalScroll)
+        if segment:
+            # The current widget already shows text: keep it as-is and stream what follows into a fresh one.
+            transcript.mount(Static(f"[dim]{line}[/]"))
+            reply_widget = Static("")
+            transcript.mount(reply_widget)
+        else:
+            transcript.mount(Static(f"[dim]{line}[/]"), before=reply_widget)
+        transcript.scroll_end(animate=False)
+        return reply_widget, ""
 
     def _render_reply(self, widget: Static, text: str) -> None:
         widget.update(f"[bold magenta]suri:[/] {text}")
