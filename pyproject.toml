@@ -13,6 +13,7 @@ dependencies = [
     "httpx",
     "ollama",
     "openai",
+    "sympy>=1.14.0",
 ]
 
 [build-system]

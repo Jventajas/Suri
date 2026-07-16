@@ -6,22 +6,20 @@ from typing import Any
 
 from deepagents import create_deep_agent  # pyright: ignore[reportUnknownVariableType]
 from langchain_core.messages import AIMessageChunk, BaseMessage, ToolMessage
-from langchain_core.tools import tool
 
 from suri.core.events import RetryAttempt, StreamError, StreamEvent, TextChunk, ToolCall, ToolResult, TurnComplete
 from suri.core.models import build_model, is_retryable_error
+from suri.core.tools import AGENT_TOOLS
 
-SYSTEM_PROMPT = "You are Suri, an assistant for mathematical research."
+SYSTEM_PROMPT = (
+    "You are Suri, an assistant for mathematical research. "
+    "Verify every nontrivial mathematical claim with your tools before asserting it — "
+    "an unverified step can silently invalidate a researcher's result. "
+    "If a tool call fails, read the error, fix the input, and retry."
+)
 
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 1.0  # seconds; doubles each attempt
-
-
-@tool
-def add(a: int, b: int) -> int:
-    """Add two integers."""
-    # Dummy tool to exercise the tool-event plumbing; removed when the first real tool lands.
-    return a + b
 
 
 class Agent:
@@ -31,7 +29,7 @@ class Agent:
         # deepagents' compiled graph is only partially typed; pin to Any at this boundary.
         self._graph: Any = create_deep_agent(
             model=build_model(provider_id, model_id),
-            tools=[add],
+            tools=list(AGENT_TOOLS),
             system_prompt=SYSTEM_PROMPT,
         )
 
