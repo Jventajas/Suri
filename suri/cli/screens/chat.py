@@ -12,6 +12,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
+from suri.cli.latex import typeset_math
 from suri.cli.screens.login import LoginScreen
 from suri.cli.screens.model_picker import ModelChoice, ModelScreen
 from suri.core import (
@@ -198,7 +199,7 @@ class ChatScreen(Screen[None]):
             return
 
         transcript = self.query_one("#transcript", VerticalScroll)
-        transcript.mount(Static(f"[bold cyan]you:[/] {value}"))
+        transcript.mount(Static(f"[bold cyan]you:[/] {typeset_math(value)}"))
         reply_widget = Static("[bold magenta]suri:[/] [dim]…[/]")
         transcript.mount(reply_widget)
         transcript.scroll_end(animate=False)
@@ -236,7 +237,9 @@ class ChatScreen(Screen[None]):
                     else:
                         plan_widget.update(plan)
                 case TurnComplete():
-                    pass
+                    # The reply is final now: redraw it with its formulas typeset.
+                    if segment:
+                        self._render_reply(reply_widget, typeset_math(segment))
                 case _:
                     assert_never(stream_event)
         if reply:
